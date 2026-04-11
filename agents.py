@@ -4,10 +4,13 @@ import heapq
 from collections import deque
 
 
+# random agent selects a move at random
 class RandomAgent:
     def get_action(self, state, valid_moves):
         return random.choice(valid_moves)
     
+
+# greedy agent moves toward food using distance only
 class GreedyAgent:
     def get_action(self, state, valid_moves):
         head_x, head_y = state["snake"][0]
@@ -35,6 +38,8 @@ class GreedyAgent:
 
         return best_move
 
+
+# bfs agent finds shortest path using equal cost exploration
 class BFSAgent:
     def get_action(self, state, valid_moves):
         start = state["snake"][0]
@@ -77,6 +82,8 @@ class BFSAgent:
         # fallback if no path found
         return valid_moves[0]
 
+
+# A* agent balances path cost and distance to food
 class AStarAgent:
     def get_action(self, state, valid_moves):
         start = state["snake"][0]
@@ -123,7 +130,9 @@ class AStarAgent:
 
         return valid_moves[0]
 
-class AStarBayesAgent:
+
+# astar agent adds global risk estimation based on reachable space
+class AStarGlobalSpaceAgent:
     def get_action(self, state, valid_moves):
         start = state["snake"][0]
         goal = state["food"]
@@ -193,7 +202,7 @@ class AStarBayesAgent:
                 new_g = g + 1
                 r = risk(new_pos)
 
-                # λ controls how much risk matters (we may want to tune this better)
+                # λ controls how much risk matters
                 lam = 50
                 new_f = new_g + heuristic(new_pos) + lam * r
 
@@ -201,7 +210,128 @@ class AStarBayesAgent:
 
         return valid_moves[0]
 
-class AStarBayesLocalAgent:
+
+# 4/10/2026 edit: kept this class instead of removing it because we'll want to explain what it was originally
+# 4/10/2026 edit: (incorrectly) designed to do and what we learned from the process
+# 
+# class AStarBayesLocalAgent:
+#     def get_action(self, state, valid_moves):
+#         start = state["snake"][0]
+#         goal = state["food"]
+#         snake_body = set(state["snake"])
+
+#         def heuristic(pos):
+#             return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+#         # standard A* to get best path (no risk inside search)
+#         def astar():
+#             pq = []
+#             heapq.heappush(pq, (heuristic(start), 0, start, []))
+#             visited = set()
+
+#             while pq:
+#                 f, g, current, path = heapq.heappop(pq)
+
+#                 if current in visited:
+#                     continue
+#                 visited.add(current)
+
+#                 if current == goal:
+#                     return path
+
+#                 for move, (dx, dy) in {
+#                     "UP": (0, -1),
+#                     "DOWN": (0, 1),
+#                     "LEFT": (-1, 0),
+#                     "RIGHT": (1, 0)
+#                 }.items():
+#                     new_pos = (current[0] + dx, current[1] + dy)
+
+#                     x, y = new_pos
+#                     if x < 0 or x >= state["width"] or y < 0 or y >= state["height"]:
+#                         continue
+#                     if new_pos in snake_body:
+#                         continue
+#                     if new_pos in visited:
+#                         continue
+
+#                     new_g = g + 1
+#                     new_f = new_g + heuristic(new_pos)
+
+#                     heapq.heappush(pq, (new_f, new_g, new_pos, path + [move]))
+
+#             return None
+
+#         # risk = inverse reachable space (limited BFS for speed)
+#         def risk(pos):
+#             visited = set()
+#             queue = deque([pos])
+#             count = 0
+#             max_cells = 100  # limit for speed
+
+#             while queue and count < max_cells:
+#                 current = queue.popleft()
+#                 if current in visited:
+#                     continue
+#                 visited.add(current)
+#                 count += 1
+
+#                 for dx, dy in [(0,-1),(0,1),(-1,0),(1,0)]:
+#                     nx, ny = current[0] + dx, current[1] + dy
+
+#                     if (nx, ny) in visited:
+#                         continue
+#                     if nx < 0 or nx >= state["width"] or ny < 0 or ny >= state["height"]:
+#                         continue
+#                     if (nx, ny) in snake_body:
+#                         continue
+
+#                     queue.append((nx, ny))
+
+#             return 1 / (count + 1)
+
+#         # get best A* path
+#         path = astar()
+
+#         # if no path, fallback
+#         if not path:
+#             return valid_moves[0]
+
+#         # evaluate ONLY first move using risk
+#         best_move = None
+#         best_score = float("inf")
+
+#         lam = 20  # smaller since we only apply locally
+
+#         head_x, head_y = start
+
+#         for move in valid_moves:
+#             dx, dy = {
+#                 "UP": (0, -1),
+#                 "DOWN": (0, 1),
+#                 "LEFT": (-1, 0),
+#                 "RIGHT": (1, 0)
+#             }[move]
+
+#             new_pos = (head_x + dx, head_y + dy)
+
+#             h = heuristic(new_pos)
+#             r = risk(new_pos)
+
+#             score = h + lam * r
+
+#             if score < best_score:
+#                 best_score = score
+#                 best_move = move
+
+#         return best_move
+
+
+# weighted A* agent scales heuristic with alpha (default α = 2) to favor faster paths to food
+class WeightedAStarAgent:
+    def __init__(self, alpha=2):
+        self.alpha = alpha
+
     def get_action(self, state, valid_moves):
         start = state["snake"][0]
         goal = state["food"]
@@ -210,109 +340,45 @@ class AStarBayesLocalAgent:
         def heuristic(pos):
             return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
 
-        # standard A* to get best path (no risk inside search)
-        def astar():
-            pq = []
-            heapq.heappush(pq, (heuristic(start), 0, start, []))
-            visited = set()
+        pq = []
+        heapq.heappush(pq, (self.alpha * heuristic(start), 0, start, []))
+        visited = set()
 
-            while pq:
-                f, g, current, path = heapq.heappop(pq)
+        while pq:
+            f, g, current, path = heapq.heappop(pq)
 
-                if current in visited:
-                    continue
-                visited.add(current)
+            if current in visited:
+                continue
+            visited.add(current)
 
-                if current == goal:
-                    return path
+            if current == goal:
+                return path[0] if path else valid_moves[0]
 
-                for move, (dx, dy) in {
-                    "UP": (0, -1),
-                    "DOWN": (0, 1),
-                    "LEFT": (-1, 0),
-                    "RIGHT": (1, 0)
-                }.items():
-                    new_pos = (current[0] + dx, current[1] + dy)
-
-                    x, y = new_pos
-                    if x < 0 or x >= state["width"] or y < 0 or y >= state["height"]:
-                        continue
-                    if new_pos in snake_body:
-                        continue
-                    if new_pos in visited:
-                        continue
-
-                    new_g = g + 1
-                    new_f = new_g + heuristic(new_pos)
-
-                    heapq.heappush(pq, (new_f, new_g, new_pos, path + [move]))
-
-            return None
-
-        # risk = inverse reachable space (limited BFS for speed)
-        def risk(pos):
-            visited = set()
-            queue = deque([pos])
-            count = 0
-            max_cells = 100  # limit for speed
-
-            while queue and count < max_cells:
-                current = queue.popleft()
-                if current in visited:
-                    continue
-                visited.add(current)
-                count += 1
-
-                for dx, dy in [(0,-1),(0,1),(-1,0),(1,0)]:
-                    nx, ny = current[0] + dx, current[1] + dy
-
-                    if (nx, ny) in visited:
-                        continue
-                    if nx < 0 or nx >= state["width"] or ny < 0 or ny >= state["height"]:
-                        continue
-                    if (nx, ny) in snake_body:
-                        continue
-
-                    queue.append((nx, ny))
-
-            return 1 / (count + 1)
-
-        # get best A* path
-        path = astar()
-
-        # if no path, fallback
-        if not path:
-            return valid_moves[0]
-
-        # evaluate ONLY first move using risk
-        best_move = None
-        best_score = float("inf")
-
-        lam = 20  # smaller since we only apply locally
-
-        head_x, head_y = start
-
-        for move in valid_moves:
-            dx, dy = {
+            for move, (dx, dy) in {
                 "UP": (0, -1),
                 "DOWN": (0, 1),
                 "LEFT": (-1, 0),
                 "RIGHT": (1, 0)
-            }[move]
+            }.items():
+                new_pos = (current[0] + dx, current[1] + dy)
 
-            new_pos = (head_x + dx, head_y + dy)
+                x, y = new_pos
+                if x < 0 or x >= state["width"] or y < 0 or y >= state["height"]:
+                    continue
+                if new_pos in snake_body:
+                    continue
+                if new_pos in visited:
+                    continue
 
-            h = heuristic(new_pos)
-            r = risk(new_pos)
+                new_g = g + 1
+                new_f = new_g + self.alpha * heuristic(new_pos)
 
-            score = h + lam * r
+                heapq.heappush(pq, (new_f, new_g, new_pos, path + [move]))
 
-            if score < best_score:
-                best_score = score
-                best_move = move
+        return valid_moves[0]
 
-        return best_move
 
+# A* tail safe agent ensures snake can still reach tail after path
 class AStarTailSafeAgent:
     def get_action(self, state, valid_moves):
         start = state["snake"][0]
